@@ -1,0 +1,127 @@
+name: Playwright CompanyDetailsLogoEmailsetup
+on:
+  #schedule:
+    #- cron: '30 14 * * 1-5' # Mon-Fri 8:00 PM IST
+  push:
+   branches: [master]
+  pull_request:
+   branches: [master]
+  workflow_dispatch:
+   inputs:
+      environment:
+        description: 'Select environment'
+        required: true
+        default: 'QA'
+        type: choice
+        options:
+          - QA
+          - stage
+          - dev
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright OS deps only (if cached)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Run UI tests
+        run: npx playwright test --project=ui
+        env:
+          ENV: ${{ github.event.inputs.environment || 'qa'}}
+          APP_URL: ${{ secrets.APP_URL }}
+          APPUSERNAME: ${{ secrets.APPUSERNAME }}
+          APPPASSWORD: ${{ secrets.APPPASSWORD }}
+          API_URL: ${{ secrets.API_URL }}
+          ACCESSTOKEN: ${{ secrets.ACCESSTOKEN }}
+          
+      
+      - name: Upload HTML Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-html-report
+          path: reports/html-report/
+          retention-days: 30
+
+      - name: Generate Allure Report
+        if: always()
+        run: |
+          npx allure generate allure-results -o allure-report --clean
+
+      - name: Customize Allure Report
+        if: always()
+        run: |
+          node src/allure/customize-allure-report.js
+        
+      - name: Setup GitHub Pages
+        if: always()
+        uses: actions/configure-pages@v5
+
+      - name: Upload Allure Report to GitHub Pages
+        if: always()
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: './allure-report'
+
+      - name: Deploy Allure Report to GitHub Pages
+        if: always()
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Display Allure Report URL
+        if: success()
+        run: |
+          echo "======================================"
+          echo "Allure Report:"
+          echo "${{ steps.deployment.outputs.page_url }}"
+          echo "======================================"
+
+      - name: Upload Allure Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report/
+          retention-days: 30
+
+      - name: Send Allure Report Email
+        if: always()
+        run: |
+          npx tsx src/email/send-report-email.ts
+        env:
+         MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+         MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
+         ALLURE_REPORT_URL: ${{ steps.deployment.outputs.page_url }}
+         STUDENT_EMAILS: ${{ secrets.STUDENT_EMAILS }}

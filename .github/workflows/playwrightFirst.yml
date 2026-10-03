@@ -1,0 +1,60 @@
+name: Playwright First WorkFlow Tests
+
+on:
+  schedule:
+    - cron: '30 14 * * 1-5' # Mon-Fri 8:00 PM IST
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+   
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run UI tests
+        run: npx playwright test --project=ui
+        env:
+          ENV: ${{ github.event.inputs.environment || 'qa'}}
+          APP_URL: ${{ secrets.APP_URL }}
+          APPUSERNAME: ${{ secrets.APPUSERNAME }}
+          APPPASSWORD: ${{ secrets.APPPASSWORD }}
+          API_URL: ${{ secrets.API_URL }}
+          ACCESSTOKEN: ${{ secrets.ACCESSTOKEN }}
+          
+
+      - name: Upload HTML Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-html-report
+          path: reports/html-report/
+          retention-days: 30
+
+      - name: Upload Allure Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results/
+          retention-days: 30

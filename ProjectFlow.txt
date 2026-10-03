@@ -1,0 +1,192 @@
+1.create new project and install playwright
+2.create folder structure
+3.create test cases with hooks and fixture
+4.to read data from file
+install all libraries
+ 1.npm install papaparse
+2 sheetjs: https://www.npmjs.com/package/xlsx
+ npm install xlsx 
+
+run if you get error
+npm i --save-dev @types/papaparse
+
+
+//for allure report 
+1. command line setup for CICD
+Run this command from terminal(windows/mac)
+npm install -g allure
+
+2.check version
+allure --version
+3.14.0
+
+3.find location
+where allure
+you will get path
+
+4.reach upto the path and do enviornment variable setup
+edit system enviornment variable and userpath and system path
+
+2.Install Allure in Project level for playwright integration
+https://allurereport.org/docs/playwright/
+
+3.update playwright config file
+ reporter: [['html'],["allure-playwright"]],
+
+4. run the project
+npx playwright test
+
+one time:To install Allure commandline 
+npm install --save-dev allure-playwright allure-commandline
+
+Step4:to generate allure report
+generate report
+https://www.npmjs.com/package/allure-playwright
+
+npx allure generate allure-results --clean -o allure-report
+
+step5: to open report
+npx allure open allure-report
+
+
+==============================
+Add executable script
+1.Add it inside package.json file
+"script":{"test": "npx playwright test",
+"test:headed": "npx playwright test -headed",
+ "test:chrome": "npx playwright test --project=chromiun",
+ "allure:generate": "npx allure generate allure-results --clean -o allure-report",
+ "allure:open": "npx allure open allure-report",
+ "allure:report": "npm run allure:generate && npm run allure:open",
+ "allure:clean": "rm -rf allure-results allure-report"
+}
+
+How to run current script
+---------------------------
+npm run test
+npm run allure:report
+
+
+=====================
+multiple Enviornment setup
+-------------------
+ environment variable/ configuration
+===================================================
+1.for enviornment we have dotenv package avialable by default
+create config folder in project
+
+create .env.qa file, .env.dev , .env.stage
+store some config data
+
+2. goto terminal and add package: https://www.npmjs.com/package/dotenv
+npm install dotenv --save
+
+then to read data from file goto pw.config.json 
+add import dotenv from 'dotenv';
+
+then add
+ import dotenv from "dotenv";
+
+const ENV = process.env.ENV || "qa";
+
+const result = dotenv.config({
+  path: `config/.env.${ENV}`,
+});
+
+// console.log("Dotenv Result:", result);
+// console.log("BASE_URL:", process.env.APPBASEURL);
+// console.log("APPUSERNAME:", process.env.APPUSERNAME);
+// console.log("APPPASSWORD:", process.env.APPPASSWORD);
+
+
+use: {
+    /* Base URL to use in actions like `await page.goto('')`. */
+     //baseURL: 'https://www.saucedemo.com/',
+
+     baseURL:process.env.APPBASEURL,
+
+    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
+    trace: 'on-first-retry',
+    headless:!process.env.CI?false:true,
+    screenshot:"on",
+    video:"on"
+  },
+  
+To run on specific env on windows machine
+----------------------------
+ $env:ENV="qa"; npx playwright test
+
+For Mac/Linux
+---------------------------
+ENV=qa npx playwright test
+
+
+==================================================
+For Enviornment 
+1.install cross enviornment
+npm install --save-dev cross-env
+
+2.update script : it will run only through script
+"scripts": {
+  "env:dev": "cross-env ENV=dev playwright test",
+  "env:qa": "cross-env ENV=qa playwright test"
+}
+3. run in powsershell
+npm run env:qa
+
+//API testing
+===================
+Schema validation
+1. install required package: ajv library
+https://www.npmjs.com/package/ajv
+
+npm install ajv
+ 
+-AJV stands for "Another Json Schema Validator"
+-Ajv used for schema validation
+- Ajv used one compile() where we can pass schema and 
+this method returnd anonymous validator function which we can 
+store into variable
+
+let validate=ajv.compile(schema);
+
+- in validate function we can provide actual server response which we
+wanted to validate with respect to schema
+
+-In real time you dont required to generate schema , it wil be 
+provided in detialed design document by developers
+
+
+
+
+How to run seperately Playwright ui test and api test
+----------------------------------------
+ {
+      name: 'ui',
+      testIgnore:'**/api/**',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'api',
+      testMatch:'**/api/**/*.spec.ts'
+     
+    }
+
+
+Reporting-Lab Report for Playwright
+=========================================
+https://www.npmjs.com/package/reporting-labs
+
+
+//Devops
+
+//CICD
+
+//BDD
+
+//AI Intergration
+
+
+//mock interviews
+
+10th Octomber

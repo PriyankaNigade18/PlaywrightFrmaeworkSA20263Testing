@@ -1,12 +1,13 @@
-name: Playwright Second WorkFlow Email
+name: Playwright WorkFlow Email
 
 on:
   push:
     branches: [master]
+
   pull_request:
     branches: [master]
 
-workflow_dispatch:
+  workflow_dispatch:
     inputs:
       environment:
         description: 'Select environment'
@@ -96,7 +97,7 @@ jobs:
       # ----------------------------------------------------------
       # CUSTOMIZE ALLURE
       # ----------------------------------------------------------
-      - name: Customize Allure Report
+      - name: Customize Allure
         if: always()
         run: |
           node src/allure/customize-allure-report.js
@@ -113,7 +114,7 @@ jobs:
           retention-days: 30
 
       # ----------------------------------------------------------
-      # SAVE ALLURE REPORT FOR NEXT JOB
+      # SAVE ALLURE REPORT FOR DEPLOY JOB
       # ----------------------------------------------------------
       - name: Upload Allure Pages Files
         if: always()
@@ -132,9 +133,9 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
+      contents: read
       pages: write
       id-token: write
-      contents: read
 
     steps:
 
@@ -194,9 +195,5 @@ jobs:
         env:
           MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
           MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
-
-          # GitHub Pages URL
           ALLURE_REPORT_URL: https://priyankanigade18.github.io/PlaywrightFrmaeworkSA20263Testing/
-
           STUDENT_EMAILS: ${{ secrets.STUDENT_EMAILS }}
-

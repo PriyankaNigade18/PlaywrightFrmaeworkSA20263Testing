@@ -10,8 +10,9 @@ test.beforeEach(async({loginPage,inventoryPage,cartPage})=>{
 // await loginPage.doLogin(data.username,data.password);
 await loginPage.doLogin(process.env.APPUSERNAME!,process.env.APPPASSWORD!);
 await inventoryPage.waitUtil();
-let ivpagedata=readExcelFileSheetWise("InventoryPage",0);
-await inventoryPage.addProductIntoCart(ivpagedata.product1);
+// let ivpagedata=readExcelFileSheetWise("InventoryPage",0);
+// await inventoryPage.addProductIntoCart(ivpagedata.product1);
+await inventoryPage.addProductIntoCart("Sauce Labs Fleece Jacket");
 await cartPage.gotoCartPage();
 await cartPage.goToCheckoutPage();
 await cartPage.waitUtil();

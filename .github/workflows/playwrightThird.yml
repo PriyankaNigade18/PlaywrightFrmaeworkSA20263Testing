@@ -25,10 +25,6 @@ permissions:
   id-token: write
 
 jobs:
-
-  # ============================================================
-  # 1. RUN PLAYWRIGHT TESTS + GENERATE ALLURE REPORT
-  # ============================================================
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -62,9 +58,6 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
-      # ----------------------------------------------------------
-      # RUN TESTS
-      # ----------------------------------------------------------
       - name: Run UI tests
         run: npx playwright test --project=ui
         env:
@@ -75,9 +68,6 @@ jobs:
           API_URL: ${{ secrets.API_URL }}
           ACCESSTOKEN: ${{ secrets.ACCESSTOKEN }}
 
-      # ----------------------------------------------------------
-      # PLAYWRIGHT HTML REPORT
-      # ----------------------------------------------------------
       - name: Upload HTML Report
         if: always()
         uses: actions/upload-artifact@v4
@@ -86,25 +76,16 @@ jobs:
           path: reports/html-report/
           retention-days: 30
 
-      # ----------------------------------------------------------
-      # GENERATE ALLURE
-      # ----------------------------------------------------------
       - name: Generate Allure Report
         if: always()
         run: |
           npx allure generate allure-results -o allure-report --clean
 
-      # ----------------------------------------------------------
-      # CUSTOMIZE ALLURE
-      # ----------------------------------------------------------
-      - name: Customize Allure
+      - name: Customize Allure Report
         if: always()
         run: |
           node src/allure/customize-allure-report.js
 
-      # ----------------------------------------------------------
-      # UPLOAD ALLURE REPORT AS DOWNLOADABLE ARTIFACT
-      # ----------------------------------------------------------
       - name: Upload Allure Report
         if: always()
         uses: actions/upload-artifact@v4
@@ -113,83 +94,31 @@ jobs:
           path: allure-report/
           retention-days: 30
 
-      # ----------------------------------------------------------
-      # SAVE ALLURE REPORT FOR DEPLOY JOB
-      # ----------------------------------------------------------
-      - name: Upload Allure Pages Files
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-pages-files
-          path: allure-report/
-          retention-days: 1
-
-
-  # ============================================================
-  # 2. DEPLOY ALLURE TO GITHUB PAGES
-  # ============================================================
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-
-    steps:
-
-      - name: Download Allure Report
-        uses: actions/download-artifact@v4
-        with:
-          name: allure-pages-files
-          path: allure-report
-
       - name: Setup GitHub Pages
+        if: always()
         uses: actions/configure-pages@v5
 
-      - name: Upload Pages Artifact
+      - name: Upload Allure Report to GitHub Pages
+        if: always()
         uses: actions/upload-pages-artifact@v3
         with:
           path: allure-report
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy Allure Report to GitHub Pages
+        if: always()
         id: deployment
         uses: actions/deploy-pages@v4
 
       - name: Display Allure Report URL
+        if: always()
         run: |
           echo "======================================"
-          echo "Allure Report:"
+          echo "Allure Report URL:"
           echo "${{ steps.deployment.outputs.page_url }}"
           echo "======================================"
 
-
-  # ============================================================
-  # 3. SEND EMAIL
-  # ============================================================
-  email:
-    needs: deploy
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-
-    steps:
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
       - name: Send Allure Report Email
+        if: always()
         run: |
           npx tsx src/email/send-report-email.ts
         env:

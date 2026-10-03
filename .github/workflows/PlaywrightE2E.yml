@@ -1,0 +1,1099 @@
+name: Playwright E2E UI CI/CD Pipeline
+
+on:
+
+  # ============================================================
+  # SCHEDULED EXECUTION
+  # Mon-Fri 8:00 PM IST
+  # ============================================================
+
+  #schedule:
+    #- cron: '30 14 * * 1-5'
+
+
+  # ============================================================
+  # MANUAL EXECUTION
+  # ============================================================
+
+  workflow_dispatch:
+
+    inputs:
+
+      environment:
+
+        description: 'Select environment'
+
+        required: true
+
+        default: 'QA'
+
+        type: choice
+
+        options:
+
+          - dev
+          - QA
+          - stage
+
+
+# ============================================================
+# GITHUB PAGES PERMISSIONS
+# ============================================================
+
+permissions:
+
+  contents: read
+
+  pages: write
+
+  id-token: write
+
+
+# ============================================================
+# JOB 1
+# PLAYWRIGHT UI TESTING
+# ============================================================
+
+jobs:
+
+  ui-tests:
+
+    name: Playwright UI Tests
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 15
+
+
+    steps:
+
+      # ========================================================
+      # 1. CHECKOUT CODE
+      # ========================================================
+
+      - name: Checkout code
+
+        uses: actions/checkout@v4
+
+
+      # ========================================================
+      # 2. SETUP NODE
+      # ========================================================
+
+      - name: Setup Node.js
+
+        uses: actions/setup-node@v4
+
+        with:
+
+          node-version: 24
+
+          cache: 'npm'
+
+
+      # ========================================================
+      # 3. CACHE PLAYWRIGHT BROWSERS
+      # ========================================================
+
+      - name: Cache Playwright browsers
+
+        id: playwright-cache
+
+        uses: actions/cache@v4
+
+        with:
+
+          path: ~/.cache/ms-playwright
+
+          key: playwright-${{ hashFiles('package-lock.json') }}
+
+
+      # ========================================================
+      # 4. INSTALL NPM DEPENDENCIES
+      # ========================================================
+
+      - name: Install dependencies
+
+        run: npm ci
+
+
+      # ========================================================
+      # 5. INSTALL PLAYWRIGHT
+      # ========================================================
+
+      - name: Install Playwright browsers
+
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+
+        run: npx playwright install --with-deps chromium
+
+
+      # ========================================================
+      # 6. INSTALL OS DEPENDENCIES
+      # ========================================================
+
+      - name: Install Playwright OS dependencies
+
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+
+        run: npx playwright install-deps chromium
+
+
+      # ========================================================
+      # 7. RUN UI TESTS
+      # ========================================================
+
+      - name: Run UI Tests
+
+        run: |
+
+          echo "=================================================="
+          echo "          PLAYWRIGHT UI AUTOMATION"
+          echo "=================================================="
+
+          echo "Environment: ${{ github.event.inputs.environment || 'QA' }}"
+
+          echo "Browser: Chromium"
+
+          echo "=================================================="
+
+          npx playwright test --project=ui
+
+        env:
+
+          ENV: ${{ github.event.inputs.environment || 'qa' }}
+
+          APP_URL: ${{ secrets.APP_URL }}
+          APPUSERNAME: ${{ secrets.APPUSERNAME }}
+          APPPASSWORD: ${{ secrets.APPPASSWORD }}
+          API_URL: ${{ secrets.API_URL }}
+          ACCESSTOKEN: ${{ secrets.ACCESSTOKEN }}
+
+
+      # ========================================================
+      # 8. UPLOAD PLAYWRIGHT HTML REPORT
+      # ========================================================
+
+      - name: Upload HTML Report
+
+        if: always()
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: playwright-html-report
+
+          path: reports/html-report/
+
+          retention-days: 30
+
+
+      # ========================================================
+      # 9. GENERATE ALLURE REPORT
+      # ========================================================
+
+      - name: Generate Allure Report
+
+        if: always()
+
+        run: |
+
+          echo "=================================================="
+          echo "             GENERATING ALLURE REPORT"
+          echo "=================================================="
+
+          npx allure generate allure-results -o allure-report --clean
+
+
+      # ========================================================
+      # 10. CUSTOMIZE ALLURE REPORT
+      # ========================================================
+
+      - name: Customize Allure Report
+
+        if: always()
+
+        run: |
+
+          echo "=================================================="
+          echo "          CUSTOMIZING ALLURE REPORT"
+          echo "=================================================="
+
+          node src/allure/customize-allure-report.js
+
+
+      # ========================================================
+      # 11. CREATE ALLURE ZIP
+      #
+      # Required by your existing email script
+      # ========================================================
+
+      - name: Create Allure Report ZIP
+
+        if: always()
+
+        run: |
+
+          zip -r allure-report.zip allure-report
+
+
+      # ========================================================
+      # 12. UPLOAD ALLURE ZIP
+      # ========================================================
+
+      - name: Upload Allure ZIP
+
+        if: always()
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: allure-report-zip
+
+          path: allure-report.zip
+
+          retention-days: 30
+
+
+      # ========================================================
+      # 13. UPLOAD ALLURE REPORT ARTIFACT
+      # ========================================================
+
+      - name: Upload Allure Report
+
+        if: always()
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: allure-report
+
+          path: allure-report/
+
+          retention-days: 30
+
+
+      # ========================================================
+      # 14. SETUP GITHUB PAGES
+      # ========================================================
+
+      - name: Setup GitHub Pages
+
+        if: always()
+
+        uses: actions/configure-pages@v5
+
+
+      # ========================================================
+      # 15. CREATE PAGES DIRECTORY
+      # ========================================================
+
+      - name: Prepare GitHub Pages
+
+        if: always()
+
+        run: |
+
+          mkdir -p pages-deploy/allure
+
+          mkdir -p pages-deploy/html
+
+          mkdir -p pages-deploy/assets
+
+
+          # Copy Allure report
+
+          cp -r allure-report/* pages-deploy/allure/
+
+
+          # Copy Playwright HTML report
+
+          if [ -d "reports/html-report" ]; then
+
+            cp -r reports/html-report/* pages-deploy/html/
+
+          fi
+
+
+      # ========================================================
+      # 16. CREATE INTERACTIVE DASHBOARD
+      # ========================================================
+
+      - name: Create Interactive Report Dashboard
+
+        if: always()
+
+        run: |
+
+          TEST_RESULT="${{ job.status }}"
+
+          if [ "$TEST_RESULT" = "success" ]; then
+
+            STATUS_TEXT="ALL TESTS PASSED"
+
+            STATUS_CLASS="pass"
+
+            STATUS_ICON="✅"
+
+          else
+
+            STATUS_TEXT="TEST EXECUTION FAILED"
+
+            STATUS_CLASS="fail"
+
+            STATUS_ICON="❌"
+
+          fi
+
+
+          cat > pages-deploy/index.html << 'DASHBOARD'
+
+          <!DOCTYPE html>
+
+          <html lang="en">
+
+          <head>
+
+            <meta charset="UTF-8">
+
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+            <title>Playwright Automation Dashboard</title>
+
+
+            <style>
+
+              * {
+                box-sizing: border-box;
+              }
+
+
+              body {
+
+                margin: 0;
+
+                font-family: Arial, Helvetica, sans-serif;
+
+                background: linear-gradient(135deg, #eef2ff, #f8fafc);
+
+                color: #1f2937;
+
+              }
+
+
+              .container {
+
+                max-width: 1100px;
+
+                margin: auto;
+
+                padding: 30px;
+
+              }
+
+
+              .header {
+
+                background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+
+                color: white;
+
+                padding: 40px;
+
+                border-radius: 18px;
+
+                box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+
+                text-align: center;
+
+              }
+
+
+              .header h1 {
+
+                margin: 0;
+
+                font-size: 32px;
+
+              }
+
+
+              .header p {
+
+                margin-top: 10px;
+
+                opacity: 0.85;
+
+              }
+
+
+              .status-badge {
+
+                display: inline-block;
+
+                margin-top: 20px;
+
+                padding: 10px 22px;
+
+                border-radius: 30px;
+
+                font-weight: bold;
+
+                font-size: 14px;
+
+              }
+
+
+              .pass {
+
+                background: #16a34a;
+
+                color: white;
+
+              }
+
+
+              .fail {
+
+                background: #dc2626;
+
+                color: white;
+
+              }
+
+
+              .info-grid {
+
+                display: grid;
+
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+
+                gap: 18px;
+
+                margin-top: 25px;
+
+              }
+
+
+              .info-card {
+
+                background: white;
+
+                padding: 22px;
+
+                border-radius: 14px;
+
+                box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+
+                transition: transform 0.2s;
+
+              }
+
+
+              .info-card:hover {
+
+                transform: translateY(-4px);
+
+              }
+
+
+              .info-card .icon {
+
+                font-size: 28px;
+
+              }
+
+
+              .info-card h3 {
+
+                margin: 12px 0 5px;
+
+                color: #111827;
+
+              }
+
+
+              .info-card p {
+
+                margin: 0;
+
+                color: #6b7280;
+
+              }
+
+
+              .reports {
+
+                background: white;
+
+                margin-top: 25px;
+
+                padding: 30px;
+
+                border-radius: 16px;
+
+                box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+
+              }
+
+
+              .reports h2 {
+
+                margin-top: 0;
+
+              }
+
+
+              .buttons {
+
+                display: flex;
+
+                gap: 15px;
+
+                flex-wrap: wrap;
+
+                margin-top: 20px;
+
+              }
+
+
+              .btn {
+
+                padding: 13px 22px;
+
+                border-radius: 8px;
+
+                color: white;
+
+                text-decoration: none;
+
+                font-weight: bold;
+
+                transition: 0.2s;
+
+              }
+
+
+              .btn:hover {
+
+                transform: translateY(-2px);
+
+                opacity: 0.9;
+
+              }
+
+
+              .allure {
+
+                background: #16a34a;
+
+              }
+
+
+              .html {
+
+                background: #1e293b;
+
+              }
+
+
+              .github {
+
+                background: #111827;
+
+              }
+
+
+              .footer {
+
+                text-align: center;
+
+                margin-top: 25px;
+
+                color: #6b7280;
+
+                font-size: 13px;
+
+              }
+
+
+              .details {
+
+                margin-top: 25px;
+
+              }
+
+
+              details {
+
+                background: white;
+
+                padding: 18px;
+
+                border-radius: 12px;
+
+                box-shadow: 0 3px 10px rgba(0,0,0,0.06);
+
+              }
+
+
+              summary {
+
+                cursor: pointer;
+
+                font-weight: bold;
+
+              }
+
+            </style>
+
+
+          </head>
+
+
+          <body>
+
+
+            <div class="container">
+
+
+              <!-- HEADER -->
+
+              <div class="header">
+
+                <h1>🎭 Playwright Automation Dashboard</h1>
+
+                <p>UI Automation • CI/CD Execution Report</p>
+
+                <div class="status-badge STATUS_CLASS">
+
+                  STATUS_ICON STATUS_TEXT
+
+                </div>
+
+              </div>
+
+
+              <!-- INFORMATION CARDS -->
+
+              <div class="info-grid">
+
+
+                <div class="info-card">
+
+                  <div class="icon">🌎</div>
+
+                  <h3>Environment</h3>
+
+                  <p>ENVIRONMENT</p>
+
+                </div>
+
+
+                <div class="info-card">
+
+                  <div class="icon">🌐</div>
+
+                  <h3>Browser</h3>
+
+                  <p>Chromium</p>
+
+                </div>
+
+
+                <div class="info-card">
+
+                  <div class="icon">🔀</div>
+
+                  <h3>Branch</h3>
+
+                  <p>BRANCH</p>
+
+                </div>
+
+
+                <div class="info-card">
+
+                  <div class="icon">🏃</div>
+
+                  <h3>Run ID</h3>
+
+                  <p>RUN_ID</p>
+
+                </div>
+
+
+              </div>
+
+
+              <!-- REPORT SECTION -->
+
+              <div class="reports">
+
+                <h2>📊 Test Reports</h2>
+
+                <p>
+
+                  Select a report below to view the detailed execution results.
+
+                </p>
+
+
+                <div class="buttons">
+
+                  <a class="btn allure"
+
+                     href="allure/index.html">
+
+                    📈 Open Allure Report
+
+                  </a>
+
+
+                  <a class="btn html"
+
+                     href="html/index.html">
+
+                    📊 Open Playwright HTML Report
+
+                  </a>
+
+
+                  <a class="btn github"
+
+                     href="https://github.com/REPOSITORY/actions/runs/RUN_ID">
+
+                    ⚙️ Open GitHub Actions
+
+                  </a>
+
+                </div>
+
+              </div>
+
+
+              <!-- EXECUTION DETAILS -->
+
+              <div class="details">
+
+                <details>
+
+                  <summary>🔍 Execution Details</summary>
+
+
+                  <br>
+
+                  <strong>Environment:</strong>
+
+                  ENVIRONMENT
+
+
+                  <br><br>
+
+
+                  <strong>Browser:</strong>
+
+                  Chromium
+
+
+                  <br><br>
+
+
+                  <strong>Triggered By:</strong>
+
+                  ACTOR
+
+
+                  <br><br>
+
+
+                  <strong>Branch:</strong>
+
+                  BRANCH
+
+
+                  <br><br>
+
+
+                  <strong>Run ID:</strong>
+
+                  RUN_ID
+
+
+                  <br><br>
+
+
+                  <strong>Execution Date:</strong>
+
+                  RUN_DATE
+
+
+                </details>
+
+              </div>
+
+
+              <!-- FOOTER -->
+
+              <div class="footer">
+
+                Playwright Automation Framework
+
+                <br>
+
+                Generated automatically by GitHub Actions
+
+              </div>
+
+
+            </div>
+
+
+          </body>
+
+          </html>
+
+          DASHBOARD
+
+
+          sed -i "s/STATUS_CLASS/$STATUS_CLASS/g" pages-deploy/index.html
+
+          sed -i "s/STATUS_ICON/$STATUS_ICON/g" pages-deploy/index.html
+
+          sed -i "s/STATUS_TEXT/$STATUS_TEXT/g" pages-deploy/index.html
+
+          sed -i "s/ENVIRONMENT/${{ github.event.inputs.environment || 'QA' }}/g" pages-deploy/index.html
+
+          sed -i "s/BRANCH/${{ github.ref_name }}/g" pages-deploy/index.html
+
+          sed -i "s/RUN_ID/${{ github.run_id }}/g" pages-deploy/index.html
+
+          sed -i "s/ACTOR/${{ github.actor }}/g" pages-deploy/index.html
+
+          sed -i "s|REPOSITORY|${{ github.repository }}|g" pages-deploy/index.html
+
+          sed -i "s|RUN_DATE|$(date +'%d %b %Y, %I:%M %p UTC')|g" pages-deploy/index.html
+
+
+      # ========================================================
+      # 17. UPLOAD EVERYTHING TO GITHUB PAGES
+      # ========================================================
+
+      - name: Upload Dashboard to GitHub Pages
+
+        if: always()
+
+        uses: actions/upload-pages-artifact@v4
+
+        with:
+
+          path: './pages-deploy'
+
+
+  # ============================================================
+  # JOB 2
+  # DEPLOY DASHBOARD + REPORT TO GITHUB PAGES
+  # ============================================================
+
+  deploy-report:
+
+    name: Deploy Dashboard & Reports
+
+    needs: ui-tests
+
+    if: always()
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Deploy to GitHub Pages
+
+        id: deployment
+
+        uses: actions/deploy-pages@v4
+
+      - name: Display Dashboard URL
+
+        run: |
+
+          echo "=================================================="
+          echo "       PLAYWRIGHT REPORT DASHBOARD"
+          echo "=================================================="
+
+          echo "Dashboard URL:"
+          echo "${{ steps.deployment.outputs.page_url }}"
+
+          echo ""
+
+          echo "Allure Report:"
+          echo "${{ steps.deployment.outputs.page_url }}allure/index.html"
+
+          echo ""
+
+          echo "HTML Report:"
+          echo "${{ steps.deployment.outputs.page_url }}html/index.html"
+
+          echo "=================================================="
+
+
+  # ============================================================
+  # JOB 3
+  # SEND GMAIL
+  # ============================================================
+
+  send-email:
+
+    name: Send Gmail Report Notification
+
+    needs: deploy-report
+
+    if: always()
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout code
+
+        uses: actions/checkout@v4
+
+
+      - name: Setup Node.js
+
+        uses: actions/setup-node@v4
+
+        with:
+          node-version: 24
+          cache: 'npm'
+
+
+      - name: Install dependencies
+
+        run: npm ci
+
+
+      - name: Download Allure Report ZIP
+
+        uses: actions/download-artifact@v4
+
+        with:
+          name: allure-report-zip
+          path: .
+
+      - name: Verify email configuration
+        run: |
+         if [ -n "$STUDENT_EMAILS" ]; then
+            echo "✅ STUDENT_EMAILS is available"
+         else
+            echo "❌ STUDENT_EMAILS is missing"
+         fi
+        env:
+          STUDENT_EMAILS: ${{ secrets.STUDENT_EMAIL }}
+          
+      - name: Send Allure Report Email
+        run: |
+          npx tsx src/email/send-report-email.ts
+        env:
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
+          ALLURE_REPORT_URL: https://priyankanigade18.github.io/PlaywrightFrmaeworkSA20263Testing/
+          STUDENT_EMAILS: ${{ secrets.STUDENT_EMAIL }}
+
+
+  # ============================================================
+  # JOB 4
+  # PIPELINE DASHBOARD SUMMARY
+  # ============================================================
+
+  summary:
+
+    name: Pipeline Dashboard Summary
+
+    needs:
+
+      - ui-tests
+
+      - deploy-report
+
+      - send-email
+
+    if: always()
+
+    runs-on: ubuntu-latest
+
+
+    steps:
+
+      - name: Display Pipeline Summary
+
+        run: |
+
+          echo "===================================================="
+
+          echo "        PLAYWRIGHT UI CI/CD PIPELINE"
+
+          echo "             REPORT DASHBOARD"
+
+          echo "===================================================="
+
+          echo ""
+
+          echo "Environment:"
+
+          echo "${{ github.event.inputs.environment || 'QA' }}"
+
+          echo ""
+
+          echo "Browser:"
+
+          echo "Chromium"
+
+          echo ""
+
+          echo "----------------------------------------------------"
+
+          echo ""
+
+          echo "UI TESTS:"
+
+          echo "${{ needs.ui-tests.result }}"
+
+          echo ""
+
+          echo "GITHUB PAGES:"
+
+          echo "${{ needs.deploy-report.result }}"
+
+          echo ""
+
+          echo "GMAIL NOTIFICATION:"
+
+          echo "${{ needs.send-email.result }}"
+
+          echo ""
+
+          echo "----------------------------------------------------"
+
+          echo ""
+
+          echo "Dashboard:"
+
+          echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+
+          echo ""
+
+          echo "Allure Report:"
+
+          echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/allure/index.html"
+
+          echo ""
+
+          echo "===================================================="
+
+          echo "             PIPELINE COMPLETED"
+
+          echo "===================================================="

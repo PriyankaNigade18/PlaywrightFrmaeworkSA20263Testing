@@ -125,4 +125,4 @@ jobs:
           MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
           MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
           ALLURE_REPORT_URL: https://priyankanigade18.github.io/PlaywrightFrmaeworkSA20263Testing/
-          STUDENT_EMAIL: ${{ secrets.STUDENT_EMAIL }}
+          STUDENT_EMAILS: ${{ secrets.STUDENT_EMAIL }}

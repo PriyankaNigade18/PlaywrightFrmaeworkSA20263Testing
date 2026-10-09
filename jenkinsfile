@@ -18,6 +18,7 @@ pipeline {
 
     stages {
 
+        // 1. CHECKOUT CODE
         stage('Checkout Code') {
             steps {
                 echo 'CHECKOUT CODE'
@@ -29,6 +30,7 @@ pipeline {
             }
         }
 
+        // 2. CHECK NODE
         stage('Check Node') {
             steps {
                 nodejs('Node24') {
@@ -40,6 +42,7 @@ pipeline {
             }
         }
 
+        // 3. INSTALL DEPENDENCIES
         stage('Install Dependencies') {
             steps {
                 nodejs('Node24') {
@@ -48,6 +51,7 @@ pipeline {
             }
         }
 
+        // 4. INSTALL PLAYWRIGHT
         stage('Install Playwright') {
             steps {
                 nodejs('Node24') {
@@ -56,6 +60,7 @@ pipeline {
             }
         }
 
+        // 5. VERIFY ENVIRONMENT
         stage('Verify Environment') {
             steps {
                 echo "Selected environment: ${params.ENVIRONMENT}"
@@ -80,6 +85,7 @@ pipeline {
             }
         }
 
+        // 6. RUN PLAYWRIGHT UI TESTS
         stage('Run UI Tests') {
             steps {
                 echo "Running tests for: ${params.ENVIRONMENT}"
@@ -121,7 +127,9 @@ pipeline {
             }
         }
 
-        stage('Generate Allure Report') {
+        // 7. GENERATE ALLURE REPORT
+        stage('Generate Allure Report')
+        {
             steps {
                 nodejs('Node24') {
                     bat '''
@@ -136,6 +144,7 @@ pipeline {
             }
         }
 
+        // 8. CUSTOMIZE ALLURE REPORT
         stage('Customize Allure Report') {
             steps {
                 nodejs('Node24') {
@@ -146,6 +155,7 @@ pipeline {
             }
         }
 
+        // 9. PUBLISH ALLURE REPORT
         stage('Publish Allure Report') {
             steps {
                 allure([
@@ -157,6 +167,7 @@ pipeline {
             }
         }
 
+        // 10. ARCHIVE REPORTS
         stage('Archive Reports') {
             steps {
                 archiveArtifacts(
@@ -168,7 +179,9 @@ pipeline {
         }
     }
 
+    // POST EXECUTION
     post {
+
         always {
             echo '======================================'
             echo 'PIPELINE SUMMARY'
@@ -179,19 +192,69 @@ pipeline {
             echo "Build Result: ${currentBuild.currentResult}"
             echo "Build URL: ${BUILD_URL}"
 
+            // Archive reports generated before a failure
             archiveArtifacts(
                 artifacts: 'allure-results/**,allure-report/**,reports/html-report/**',
                 allowEmptyArchive: true,
                 fingerprint: true
             )
+
+            // EMAIL NOTIFICATION
+            script {
+                def finalStatus = currentBuild.currentResult
+
+                try {
+                    withCredentials([
+                        string(
+                            credentialsId: 'mail_username',
+                            variable: 'MAIL_USERNAME'
+                        ),
+                        string(
+                            credentialsId: 'mail_password',
+                            variable: 'MAIL_APP_PASSWORD'
+                        ),
+                        string(
+                            credentialsId: 'student_email',
+                            variable: 'STUDENT_EMAILS'
+                        )
+                    ]) {
+                        withEnv([
+                            "BUILD_STATUS=${finalStatus}",
+                            "TEST_ENVIRONMENT=${params.ENVIRONMENT}",
+                            "BUILD_NUMBER=${env.BUILD_NUMBER}",
+                            "BUILD_URL=${env.BUILD_URL}",
+                            "ALLURE_REPORT_URL=${env.BUILD_URL}allure/"
+                        ]) {
+                            nodejs('Node24') {
+                                def emailExitCode = bat(
+                                    script: 'npx tsx src/email/send-report-email.ts',
+                                    returnStatus: true
+                                )
+
+                                if (emailExitCode != 0) {
+                                    echo 'WARNING: Email notification failed. Check the email logs.'
+                                } else {
+                                    echo 'Email script completed successfully.'
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    echo "WARNING: Email notification error: ${e.getMessage()}"
+                }
+            }
         }
 
         success {
+            echo '======================================'
             echo 'PLAYWRIGHT PIPELINE PASSED'
+            echo '======================================'
         }
 
         failure {
+            echo '======================================'
             echo 'PLAYWRIGHT PIPELINE FAILED'
+            echo '======================================'
         }
     }
 }

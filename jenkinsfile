@@ -1,9 +1,9 @@
+
 pipeline {
 
     agent any
 
     parameters {
-
         choice(
             name: 'ENVIRONMENT',
             choices: ['QA', 'stage', 'dev'],
@@ -12,28 +12,15 @@ pipeline {
     }
 
     options {
-
         timestamps()
-
-        timeout(
-            time: 15,
-            unit: 'MINUTES'
-        )
+        timeout(time: 15, unit: 'MINUTES')
     }
 
     stages {
 
-        // ==========================================
-        // 1. CHECKOUT CODE
-        // ==========================================
-
         stage('Checkout Code') {
-
             steps {
-
-                echo '======================================'
                 echo 'CHECKOUT CODE'
-                echo '======================================'
 
                 git(
                     url: 'https://github.com/PriyankaNigade18/PlaywrightFrmaeworkSA20263Testing.git',
@@ -42,21 +29,9 @@ pipeline {
             }
         }
 
-
-        // ==========================================
-        // 2. CHECK NODE
-        // ==========================================
-
         stage('Check Node') {
-
             steps {
-
-                echo '======================================'
-                echo 'CHECK NODE SETUP'
-                echo '======================================'
-
                 nodejs('Node24') {
-
                     bat '''
                         node --version
                         npm --version
@@ -65,140 +40,79 @@ pipeline {
             }
         }
 
-
-        // ==========================================
-        // 3. INSTALL DEPENDENCIES
-        // ==========================================
-
         stage('Install Dependencies') {
-
             steps {
-
-                echo '======================================'
-                echo 'INSTALL DEPENDENCIES'
-                echo '======================================'
-
                 nodejs('Node24') {
-
-                    bat '''
-                        npm ci
-                    '''
+                    bat 'npm ci'
                 }
             }
         }
-
-
-        // ==========================================
-        // 4. INSTALL PLAYWRIGHT
-        // ==========================================
 
         stage('Install Playwright') {
-
             steps {
-
-                echo '======================================'
-                echo 'INSTALL PLAYWRIGHT CHROMIUM'
-                echo '======================================'
-
                 nodejs('Node24') {
-
-                    bat '''
-                        npx playwright install chromium
-                    '''
+                    bat 'npx playwright install chromium'
                 }
             }
         }
 
-
-        // ==========================================
-        // 5. VERIFY ENVIRONMENT
-        // ==========================================
-
         stage('Verify Environment') {
-
             steps {
-
-                echo '======================================'
-                echo 'VERIFY ENVIRONMENT'
-                echo '======================================'
+                echo "Selected environment: ${params.ENVIRONMENT}"
 
                 withCredentials([
-
                     string(
                         credentialsId: 'app_url',
                         variable: 'APP_URL'
                     )
-
                 ]) {
-
                     nodejs('Node24') {
-
                         bat '''
-                            echo Environment will be configured from Jenkins credentials.
-
-                            if defined APPBASEURL (
-                                echo APPBASEURL is available
-                            ) else (
-                                echo APPBASEURL is NOT available
+                            if not defined APP_URL (
+                                echo ERROR: APP_URL is missing
                                 exit /b 1
                             )
+
+                            echo APP_URL credential is available
                         '''
                     }
                 }
             }
         }
 
-
-        // ==========================================
-        // 6. RUN PLAYWRIGHT UI TESTS
-        // ==========================================
-
         stage('Run UI Tests') {
-
             steps {
-
-                echo '======================================'
-                echo 'RUN PLAYWRIGHT UI TESTS'
-                echo '======================================'
-
-                echo "Environment: ${params.ENVIRONMENT}"
+                echo "Running tests for: ${params.ENVIRONMENT}"
 
                 withCredentials([
-
                     string(
                         credentialsId: 'app_url',
                         variable: 'APP_URL'
                     ),
-
                     string(
                         credentialsId: 'appusername',
                         variable: 'APPUSERNAME'
                     ),
-
                     string(
                         credentialsId: 'apppassword',
                         variable: 'APPPASSWORD'
                     ),
-
-                    
                     string(
                         credentialsId: 'api_url',
                         variable: 'API_URL'
                     ),
-
                     string(
                         credentialsId: 'accesstoken',
                         variable: 'ACCESSTOKEN'
                     )
-
                 ]) {
-
                     nodejs('Node24') {
-
                         bat """
-                            set ENV=${params.ENVIRONMENT.toLowerCase()}
+                            set "ENV=${params.ENVIRONMENT.toLowerCase()}"
+                            set "APPBASEURL=%APP_URL%"
 
-                            echo Environment configured: %ENV%
+                            echo Environment: %ENV%
+                            echo Starting Playwright tests...
 
                             npx playwright test --project=ui
                         """
@@ -207,43 +121,24 @@ pipeline {
             }
         }
 
-
-        // ==========================================
-        // 7. GENERATE ALLURE REPORT
-        // ==========================================
-
         stage('Generate Allure Report') {
-
             steps {
-
-                echo '======================================'
-                echo 'GENERATE ALLURE REPORT'
-                echo '======================================'
-
                 nodejs('Node24') {
-
                     bat '''
-                        npx allure generate allure-results -o allure-report --clean
+                        if exist allure-results (
+                            npx allure generate allure-results -o allure-report --clean
+                        ) else (
+                            echo No allure-results directory found
+                            exit /b 1
+                        )
                     '''
                 }
             }
         }
 
-
-        // ==========================================
-        // 8. CUSTOMIZE ALLURE REPORT
-        // ==========================================
-
         stage('Customize Allure Report') {
-
             steps {
-
-                echo '======================================'
-                echo 'CUSTOMIZE ALLURE REPORT'
-                echo '======================================'
-
                 nodejs('Node24') {
-
                     bat '''
                         node src/allure/customize-allure-report.js
                     '''
@@ -251,19 +146,8 @@ pipeline {
             }
         }
 
-
-        // ==========================================
-        // 9. PUBLISH ALLURE REPORT
-        // ==========================================
-
         stage('Publish Allure Report') {
-
             steps {
-
-                echo '======================================'
-                echo 'PUBLISH ALLURE REPORT'
-                echo '======================================'
-
                 allure([
                     includeProperties: false,
                     results: [
@@ -273,70 +157,41 @@ pipeline {
             }
         }
 
-
-        // ==========================================
-        // 10. ARCHIVE REPORTS
-        // ==========================================
-
         stage('Archive Reports') {
-
             steps {
-
-                echo '======================================'
-                echo 'ARCHIVE REPORTS'
-                echo '======================================'
-
                 archiveArtifacts(
-                    artifacts: '''
-                        allure-results/**,
-                        allure-report/**,
-                        reports/html-report/**
-                    ''',
-
+                    artifacts: 'allure-results/**,allure-report/**,reports/html-report/**',
                     allowEmptyArchive: true,
-
                     fingerprint: true
                 )
             }
         }
     }
 
-
-    // ==============================================
-    // POST EXECUTION
-    // ==============================================
-
     post {
-
         always {
-
             echo '======================================'
             echo 'PIPELINE SUMMARY'
             echo '======================================'
 
             echo "Environment: ${params.ENVIRONMENT}"
-
             echo "Build Number: ${BUILD_NUMBER}"
-
             echo "Build Result: ${currentBuild.currentResult}"
-
             echo "Build URL: ${BUILD_URL}"
-        }
 
+            archiveArtifacts(
+                artifacts: 'allure-results/**,allure-report/**,reports/html-report/**',
+                allowEmptyArchive: true,
+                fingerprint: true
+            )
+        }
 
         success {
-
-            echo '======================================'
-            echo '✅ PLAYWRIGHT PIPELINE PASSED'
-            echo '======================================'
+            echo 'PLAYWRIGHT PIPELINE PASSED'
         }
 
-
         failure {
-
-            echo '======================================'
-            echo '❌ PLAYWRIGHT PIPELINE FAILED'
-            echo '======================================'
+            echo 'PLAYWRIGHT PIPELINE FAILED'
         }
     }
 }
